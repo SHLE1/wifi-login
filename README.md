@@ -217,8 +217,6 @@ wifi-login/
 
 ## 适配其他 Portal
 
-本项目针对中国电信 WLAN Portal 开发，如需适配其他运营商：
-
 1. 使用浏览器开发者工具抓取 Portal 登录流程
 2. 修改 `config/settings.json` 中的 URL 和字段名
 3. 如有特殊登录逻辑，可能需要修改 `scripts/wifi_portal_login.py`
