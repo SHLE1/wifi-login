@@ -16,7 +16,9 @@ macOS 下自动登录公共 WiFi Captive Portal 的脚本工具。
 
 把下面这句话丢给你的 AI 助手（Claude Code、Cursor、Windsurf 等）：
 
-> **"教我怎么运行这个项目：https://github.com/SHLE1/wifi-login"**
+```
+教我怎么运行这个项目：https://github.com/SHLE1/wifi-login
+```
 
 AI 会读取下面的指南，帮你搞定一切。
 
