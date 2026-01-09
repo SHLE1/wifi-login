@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+"""
+WiFi Portal 自动登录脚本
+
+功能：
+- 自动检测当前 WiFi 网络
+- 发现并解析 captive portal 页面
+- 自动填写登录表单并提交
+- 支持验证码 OCR 识别
+- 支持省份自动识别
+
+使用方法：
+    python wifi_portal_login.py
+
+配置文件：config/settings.json
+"""
 import json
 import logging
 import re
@@ -17,6 +32,7 @@ import requests
 import pytesseract
 from PIL import Image
 
+# 项目路径配置
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -26,33 +42,48 @@ LOG_DIR = PROJECT_ROOT / "logs"
 logger = logging.getLogger("wifi_portal_login")
 
 
+# ============================================================================
+# 数据类定义
+# ============================================================================
+
+
 @dataclass
 class PortalForm:
-    action: str
-    method: str
-    inputs: Dict[str, str]
+    """Portal 登录表单数据"""
+    action: str          # 表单提交地址
+    method: str          # 提交方法 (get/post)
+    inputs: Dict[str, str]  # 表单字段
 
 
 @dataclass
 class ProvinceRule:
-    name: str
-    realm: str
-    username_patterns: list[re.Pattern]
+    """省份识别规则"""
+    name: str                          # 省份名称
+    realm: str                         # 域名后缀
+    username_patterns: list[re.Pattern]  # 用户名匹配模式
 
 
 @dataclass
 class SubmitResult:
-    success: bool
-    attempts: int
-    last_status: Optional[int]
-    last_url: str
-    last_location: str
-    error_hint: str
-    captcha_attempts: int
-    captcha_failures: int
+    """登录提交结果"""
+    success: bool              # 是否成功
+    attempts: int              # 尝试次数
+    last_status: Optional[int]  # 最后响应状态码
+    last_url: str              # 最后请求 URL
+    last_location: str         # 最后重定向地址
+    error_hint: str            # 错误提示
+    captcha_attempts: int      # 验证码尝试次数
+    captcha_failures: int      # 验证码失败次数
+
+
+# ============================================================================
+# HTML 表单解析器
+# ============================================================================
 
 
 class SimpleFormParser(HTMLParser):
+    """简单的 HTML 表单解析器，用于提取登录表单信息"""
+
     def __init__(self) -> None:
         super().__init__()
         self.forms: list[PortalForm] = []
@@ -101,12 +132,19 @@ class SimpleFormParser(HTMLParser):
             self._in_form = False
 
 
+# ============================================================================
+# 配置和工具函数
+# ============================================================================
+
+
 def load_config() -> dict:
+    """加载配置文件"""
     with CONFIG_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def mask_value(value: str, keep: int = 2) -> str:
+    """掩码敏感信息，保留首尾字符"""
     if not value:
         return ""
     if len(value) <= keep * 2:
@@ -115,10 +153,12 @@ def mask_value(value: str, keep: int = 2) -> str:
 
 
 def clean_text(value: str) -> str:
+    """清理文本，合并空白字符"""
     return re.sub(r"\s+", " ", value or "").strip()
 
 
 def extract_error_hint(text: str) -> str:
+    """从 HTML 响应中提取错误提示信息"""
     if not text:
         return ""
     patterns = (
@@ -134,10 +174,17 @@ def extract_error_hint(text: str) -> str:
 
 
 def normalize_js_regex(value: str) -> str:
+    """将 JavaScript 正则表达式转换为 Python 格式"""
     return value.replace("\\\\", "\\")
 
 
+# ============================================================================
+# 省份规则加载和解析
+# ============================================================================
+
+
 def load_certify_js_path(config: dict) -> Optional[Path]:
+    """查找 certify.js 文件路径，用于省份自动识别"""
     configured = (
         config.get("portal", {}).get("certify_js_path")
         or config.get("login", {}).get("certify_js_path")
@@ -166,6 +213,7 @@ def load_certify_js_path(config: dict) -> Optional[Path]:
 
 @lru_cache(maxsize=2)
 def load_certify_rules(certify_path: Path) -> list[ProvinceRule]:
+    """从 certify.js 文件解析省份识别规则"""
     rules: dict[int, dict[str, object]] = {}
     name_re = re.compile(r'^provs\[(\d+)\]\.name="([^"]+)"')
     realm_re = re.compile(r'^provs\[(\d+)\]\.realm\.rule\[\d+\]\.exp="([^"]+)"')
@@ -224,6 +272,7 @@ def load_certify_rules(certify_path: Path) -> list[ProvinceRule]:
 
 
 def resolve_province_fields(username: str, rules: list[ProvinceRule]) -> Dict[str, str]:
+    """根据用户名匹配省份规则，返回省份相关字段"""
     if not username or not rules:
         return {}
 
@@ -232,11 +281,13 @@ def resolve_province_fields(username: str, rules: list[ProvinceRule]) -> Dict[st
     if "@" in username:
         username_base, realm = username.split("@", 1)
 
+    # 优先按域名后缀匹配
     if realm:
         for rule in rules:
             if rule.realm == realm:
                 return {"shortname": rule.name, "province": rule.realm, "prov": rule.name}
 
+    # 回退到用户名模式匹配
     for rule in rules:
         for pattern in rule.username_patterns:
             if pattern.match(username_base):
@@ -245,7 +296,13 @@ def resolve_province_fields(username: str, rules: list[ProvinceRule]) -> Dict[st
     return {}
 
 
+# ============================================================================
+# 响应处理和调试
+# ============================================================================
+
+
 def sanitize_response(text: str, username: str, password: str) -> str:
+    """清理响应文本中的敏感信息"""
     if not text:
         return ""
     sanitized = text
@@ -263,6 +320,7 @@ def sanitize_response(text: str, username: str, password: str) -> str:
 
 
 def save_response_snapshot(debug_config: dict, text: str) -> None:
+    """保存响应快照到文件，用于调试"""
     if not text:
         return
     response_dir = Path(debug_config.get("response_dir", "logs/portal_responses"))
@@ -278,7 +336,13 @@ def save_response_snapshot(debug_config: dict, text: str) -> None:
     logger.info("Saved response snapshot: %s", file_path)
 
 
+# ============================================================================
+# 系统命令执行
+# ============================================================================
+
+
 def run_cmd(command: list[str]) -> str:
+    """执行系统命令，返回标准输出"""
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         return ""
@@ -286,6 +350,7 @@ def run_cmd(command: list[str]) -> str:
 
 
 def run_shell(command: str) -> str:
+    """通过 zsh 执行 shell 命令"""
     result = subprocess.run(
         ["/bin/zsh", "-lc", command], capture_output=True, text=True, check=False
     )
@@ -294,7 +359,13 @@ def run_shell(command: str) -> str:
     return result.stdout.strip()
 
 
+# ============================================================================
+# WiFi 网络检测
+# ============================================================================
+
+
 def get_wifi_device() -> Optional[str]:
+    """获取 WiFi 网络接口名称（如 en0）"""
     shell_cmd = (
         "_get_wifi_ifname() {\n"
         "  if ! scutil <<< list |\n"
@@ -322,6 +393,7 @@ def get_wifi_device() -> Optional[str]:
 
 
 def get_current_ssid(device: str) -> Optional[str]:
+    """获取当前连接的 WiFi SSID"""
     shell_cmd = (
         f"networksetup -listpreferredwirelessnetworks \"{device}\" | "
         "awk 'NR==2 && sub(\"\\t\",\"\") { print; exit }'"
@@ -336,7 +408,13 @@ def get_current_ssid(device: str) -> Optional[str]:
     return output.split(":", 1)[1].strip()
 
 
+# ============================================================================
+# paramStr 会话令牌处理
+# ============================================================================
+
+
 def extract_param_str(url: str) -> str:
+    """从 URL 查询参数中提取 paramStr"""
     parsed = urlparse(url)
     query = parse_qs(parsed.query)
     values = query.get("paramStr")
@@ -345,32 +423,26 @@ def extract_param_str(url: str) -> str:
     return ""
 
 
-def find_param_str_in_html(html: str) -> str:
+def normalize_param_str(value: str) -> str:
+    """规范化 paramStr，处理 URL 编码"""
+    if not value:
+        return ""
+    return value.replace("%0D%0A", "\r\n")
+
+
+def extract_param_str_from_html(html: str) -> str:
+    """从 HTML 中提取 paramStr，优先从 input 字段，其次从 URL 模式"""
+    # 优先从 input 字段提取
+    match = re.search(r'name="paramStr"[^>]*value="([^"]+)"', html, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    # 回退到 URL 模式
     match = re.search(r"paramStr=([A-Za-z0-9%+_=\-]+)", html)
     return match.group(1) if match else ""
 
 
-def normalize_param_str(value: str) -> str:
-    if not value:
-        return ""
-    decoded = value.replace("%0D%0A", "\r\n")
-    return decoded
-
-
-def hash_param_str(value: str) -> str:
-    if not value:
-        return ""
-    return f"{abs(hash(value))}"
-
-
-def extract_param_str_from_html(html: str) -> str:
-    match = re.search(r'name="paramStr"[^>]*value="([^"]+)"', html, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return ""
-
-
 def is_valid_param_str(value: str) -> bool:
+    """检查 paramStr 是否有效（非空、非占位符、长度足够）"""
     if not value:
         return False
     trimmed = value.strip()
@@ -382,6 +454,7 @@ def is_valid_param_str(value: str) -> bool:
 
 
 def select_best_param_str(candidates: list[Tuple[str, str]]) -> Tuple[str, str]:
+    """从候选列表中选择最佳的 paramStr（优先有效且最长的）"""
     if not candidates:
         return "", ""
     valid_candidates = [item for item in candidates if is_valid_param_str(item[1])]
@@ -391,6 +464,7 @@ def select_best_param_str(candidates: list[Tuple[str, str]]) -> Tuple[str, str]:
 
 
 def collect_param_str_candidates(response: Optional[requests.Response]) -> list[Tuple[str, str]]:
+    """从 HTTP 响应中收集所有可能的 paramStr 候选值"""
     if response is None:
         return []
     candidates: list[Tuple[str, str]] = []
@@ -408,13 +482,18 @@ def collect_param_str_candidates(response: Optional[requests.Response]) -> list[
     return candidates
 
 
+# ============================================================================
+# Portal 探测和发现
+# ============================================================================
+
+
 def probe_portal_manual(
     session: requests.Session,
     url: str,
     timeout: int,
     max_redirects: int = 10,
 ) -> Tuple[str, str, list[str]]:
-    """手动跟踪重定向链，确保捕获每一步的 paramStr。"""
+    """手动跟踪重定向链，确保捕获每一步的 paramStr"""
     if not url:
         return "", "", []
 
@@ -467,10 +546,7 @@ def probe_portal_manual(
             final_html = resp.text
             html_param = extract_param_str_from_html(final_html)
             if html_param:
-                candidates.append((f"step_{step}_html_input", html_param))
-            url_param = find_param_str_in_html(final_html)
-            if url_param:
-                candidates.append((f"step_{step}_html_url", url_param))
+                candidates.append((f"step_{step}_html", html_param))
             break
 
     source, param = select_best_param_str(candidates)
@@ -484,12 +560,7 @@ def probe_portal_manual(
             ", ".join(f"{src}({len(val)})" for src, val in candidates if val),
         )
     if param:
-        logger.debug(
-            "Manual probe paramStr source=%s length=%s hash=%s",
-            source,
-            len(param),
-            hash_param_str(param),
-        )
+        logger.debug("Manual probe paramStr source=%s length=%d", source, len(param))
 
     return portal_url, normalize_param_str(param), chain
 
@@ -499,6 +570,7 @@ def probe_portal(
     url: str,
     timeout: int,
 ) -> Tuple[str, str, list[str]]:
+    """自动跟踪重定向探测 portal，返回 (portal_url, param_str, chain)"""
     if not url:
         return "", "", []
     try:
@@ -514,12 +586,7 @@ def probe_portal(
     if chain:
         logger.debug("Probe redirect chain: %s", " -> ".join(chain))
     if param:
-        logger.debug(
-            "Probe paramStr source=%s length=%s hash=%s",
-            source,
-            len(param),
-            hash_param_str(param),
-        )
+        logger.debug("Probe paramStr source=%s length=%d", source, len(param))
     return portal_url, normalize_param_str(param), chain
 
 
@@ -530,6 +597,7 @@ def resolve_param_str(
     discover_param: str,
     form: Optional[PortalForm],
 ) -> Tuple[str, str]:
+    """从多个来源解析最佳 paramStr，返回 (source, param_str)"""
     # 优先使用表单中的 paramStr（最新的，与当前会话匹配）
     if form:
         if "paramStr" in form.inputs and form.inputs["paramStr"]:
@@ -564,6 +632,7 @@ def resolve_param_str(
 
 
 def check_online(session: requests.Session, check_url: str, timeout: int) -> bool:
+    """检查网络是否已连接（通过访问检测 URL）"""
     try:
         response = session.get(check_url, allow_redirects=False, timeout=timeout)
     except requests.RequestException:
@@ -576,6 +645,21 @@ def check_online(session: requests.Session, check_url: str, timeout: int) -> boo
     return False
 
 
+def _try_probe(
+    session: requests.Session, url: str, timeout: int
+) -> Tuple[str, str]:
+    """尝试手动和自动两种方式探测 portal，返回 (portal_url, param_str)"""
+    if not url:
+        return "", ""
+    # 优先手动方式
+    portal_url, param_str, _ = probe_portal_manual(session, url, timeout)
+    if is_valid_param_str(param_str):
+        return portal_url, param_str
+    # 回退到自动方式
+    portal_url, param_str, _ = probe_portal(session, url, timeout)
+    return portal_url, param_str
+
+
 def discover_portal(
     session: requests.Session,
     check_url: str,
@@ -584,57 +668,43 @@ def discover_portal(
     index_path: str,
     probe_url: str,
 ) -> Tuple[str, str]:
-    # 首先尝试手动跟踪重定向链（更可靠）
-    logger.debug("Trying manual probe with check_url: %s", check_url)
-    portal_url, param_str, _ = probe_portal_manual(session, check_url, timeout)
+    """发现 captive portal 并获取 paramStr，返回 (portal_url, param_str)"""
+    # 依次尝试 check_url 和 probe_url
+    for url in (check_url, probe_url):
+        if not url:
+            continue
+        logger.debug("Probing portal with: %s", url)
+        portal_url, param_str = _try_probe(session, url, timeout)
+        if is_valid_param_str(param_str):
+            return portal_url, param_str
 
-    # 如果手动方式没有获取到有效 paramStr，尝试自动方式
-    if not is_valid_param_str(param_str):
-        logger.debug("Manual probe failed, trying auto probe with check_url")
-        portal_url_auto, param_str_auto, _ = probe_portal(session, check_url, timeout)
-        if is_valid_param_str(param_str_auto):
-            portal_url, param_str = portal_url_auto, param_str_auto
-
-    # 尝试 probe_url（通常是 captive.apple.com）
-    if not is_valid_param_str(param_str) and probe_url:
-        logger.debug("Trying manual probe with probe_url: %s", probe_url)
-        portal_url_probe, param_str_probe, _ = probe_portal_manual(session, probe_url, timeout)
-        if is_valid_param_str(param_str_probe):
-            portal_url, param_str = portal_url_probe, param_str_probe
-        else:
-            # 再尝试自动方式
-            portal_url_auto, param_str_auto, _ = probe_portal(session, probe_url, timeout)
-            if is_valid_param_str(param_str_auto):
-                portal_url, param_str = portal_url_auto, param_str_auto
-
-    if not portal_url and portal_base_url:
+    # 构建默认 portal URL
+    portal_url = ""
+    if portal_base_url:
         portal_url = urljoin(portal_base_url.rstrip("/") + "/", index_path.lstrip("/"))
-
     if not portal_url:
         return "", ""
-
-    if is_valid_param_str(param_str):
-        return portal_url, param_str
 
     # 最后尝试直接访问 portal 页面提取
     try:
         logger.debug("Fetching portal page directly: %s", portal_url)
         portal_resp = session.get(portal_url, timeout=timeout)
     except requests.RequestException:
-        return portal_url, param_str
+        return portal_url, ""
 
     html_param = extract_param_str_from_html(portal_resp.text)
-    if is_valid_param_str(html_param):
-        logger.debug("Found paramStr in portal HTML input field, length=%d", len(html_param))
-        return portal_url, normalize_param_str(html_param)
-
-    html_param = find_param_str_in_html(portal_resp.text)
     if html_param:
-        logger.debug("Found paramStr in portal HTML URL pattern, length=%d", len(html_param))
+        logger.debug("Found paramStr in portal HTML, length=%d", len(html_param))
     return portal_url, normalize_param_str(html_param)
 
 
+# ============================================================================
+# HTML 解析辅助函数
+# ============================================================================
+
+
 def choose_form(html: str) -> Optional[PortalForm]:
+    """从 HTML 中选择第一个表单"""
     parser = SimpleFormParser()
     parser.feed(html)
     parser.close()
@@ -644,6 +714,7 @@ def choose_form(html: str) -> Optional[PortalForm]:
 
 
 def find_frame_src(html: str, preferred_name: str = "mainFrame") -> str:
+    """查找 HTML 中的 frame src 属性"""
     match = re.search(
         rf'<frame[^>]+name="{re.escape(preferred_name)}"[^>]+src="([^"]+)"',
         html,
@@ -655,7 +726,13 @@ def find_frame_src(html: str, preferred_name: str = "mainFrame") -> str:
     return match.group(1) if match else ""
 
 
+# ============================================================================
+# 验证码处理
+# ============================================================================
+
+
 def find_captcha_src(html: str) -> str:
+    """从 HTML 中查找验证码图片 URL"""
     match = re.search(
         r'id="verifyCode_img"[^>]+src="([^"]+)"', html, re.IGNORECASE
     )
@@ -666,6 +743,7 @@ def find_captcha_src(html: str) -> str:
 
 
 def refresh_captcha_url(src: str) -> str:
+    """为验证码 URL 添加随机参数以获取新图片"""
     if not src:
         return src
     token = f"random={time.time():.6f}"
@@ -676,6 +754,7 @@ def refresh_captcha_url(src: str) -> str:
 
 
 def preprocess_captcha(image: Image.Image, threshold: int) -> Image.Image:
+    """预处理验证码图片：灰度化 + 二值化"""
     grayscale = image.convert("L")
     binary = grayscale.point(lambda x: 0 if x < threshold else 255, "1")
     return binary
@@ -688,6 +767,7 @@ def solve_captcha(
     timeout: int,
     captcha_config: dict,
 ) -> str:
+    """下载并识别验证码，返回识别结果"""
     src = find_captcha_src(html)
     if not src:
         return ""
@@ -725,6 +805,7 @@ def build_login_payload(
     certify_rules: list[ProvinceRule],
     param_str: str,
 ) -> Dict[str, str]:
+    """构建登录表单提交数据"""
     data = dict(form.inputs)
     if "paramStr" in data:
         data["paramStr"] = normalize_param_str(data["paramStr"])
@@ -767,7 +848,14 @@ def build_login_payload(
 
     return data
 
+
+# ============================================================================
+# 登录表单处理
+# ============================================================================
+
+
 def guess_field(fields: Dict[str, str], keywords: tuple[str, ...]) -> str:
+    """根据关键词猜测表单字段名"""
     for name in fields:
         lowered = name.lower()
         if any(k in lowered for k in keywords):
@@ -795,6 +883,7 @@ def submit_login_form(
     param_str_source: str,
     timeout: int,
 ) -> SubmitResult:
+    """提交登录表单，支持验证码重试"""
     form = choose_form(html)
     if not form:
         logger.warning("No form found on portal page")
@@ -851,10 +940,9 @@ def submit_login_form(
     )
     if "paramStr" in data:
         logger.debug(
-            "paramStr source=%s length=%s hash=%s",
+            "paramStr source=%s length=%d",
             param_str_source or "unknown",
             len(data["paramStr"]),
-            hash_param_str(data["paramStr"]),
         )
 
     for _ in range(max_attempts):
@@ -919,13 +1007,38 @@ def submit_login_form(
     return result
 
 
+# ============================================================================
+# 主程序入口
+# ============================================================================
+
+
 def main() -> int:
+    """
+    主函数：自动登录 WiFi captive portal
+
+    返回值：
+        0 - 成功（已在线或登录成功）
+        2 - WiFi 设备未找到
+        3 - Portal URL 未找到
+        4 - 登录失败
+    """
     config = load_config()
 
     from config.logging_config import setup_logging
 
     setup_logging(LOG_DIR, log_level=config.get("log_level", "INFO"))
 
+    # 提取配置子项
+    http_config = config.get("http", {})
+    portal_config = config.get("portal", {})
+    login_config = config.get("login", {})
+    debug_config = config.get("debug", {})
+    cookies_config = config.get("cookies", {})
+    captcha_config = config.get("captcha", {})
+    check_url = config.get("check_url", "")
+    timeout = int(http_config.get("timeout_seconds", 8))
+
+    # 检查 WiFi 连接
     ssid_target = config.get("ssid", "")
     device = get_wifi_device()
     if not device:
@@ -937,33 +1050,36 @@ def main() -> int:
         logger.info("SSID mismatch: current=%s target=%s", ssid, ssid_target)
         return 0
 
-    timeout = int(config.get("http", {}).get("timeout_seconds", 8))
+    # 创建 HTTP 会话
     session = requests.Session()
-    session.headers.update({"User-Agent": config.get("http", {}).get("user_agent", "")})
+    session.headers.update({"User-Agent": http_config.get("user_agent", "")})
 
-    if check_online(session, config.get("check_url", ""), timeout):
+    # 检查是否已在线
+    if check_online(session, check_url, timeout):
         logger.info("Already online")
         return 0
 
-    cookies_config = config.get("cookies", {})
+    # 设置 cookies
     if cookies_config.get("enabled"):
         for name, value in cookies_config.get("values", {}).items():
             if value:
                 session.cookies.set(name, value)
 
+    # 发现 portal
     portal_url, param_str = discover_portal(
         session,
-        config.get("check_url", ""),
+        check_url,
         timeout,
-        config.get("portal", {}).get("portal_base_url", ""),
-        config.get("portal", {}).get("index_path", ""),
-        config.get("portal", {}).get("probe_url", ""),
+        portal_config.get("portal_base_url", ""),
+        portal_config.get("index_path", ""),
+        portal_config.get("probe_url", ""),
     )
 
     if not portal_url:
         logger.error("Portal URL not found")
         return 3
 
+    # 处理 frame 页面
     try:
         portal_root_page = session.get(portal_url, timeout=timeout)
         frame_src = find_frame_src(portal_root_page.text)
@@ -974,18 +1090,18 @@ def main() -> int:
     except requests.RequestException:
         logger.warning("Failed to load portal root page for frame parsing")
 
+    # 构建登录 URL
     parsed_portal = urlparse(portal_url)
     base_url = f"{parsed_portal.scheme}://{parsed_portal.netloc}"
 
-    login_path = config.get("portal", {}).get("login_path", "")
+    login_path = portal_config.get("login_path", "")
     login_url = urljoin(base_url + "/", login_path.lstrip("/"))
     if param_str:
         login_url = f"{login_url}?paramStr={param_str}"
 
-    login_config = config.get("login", {})
+    # 加载省份识别规则
     login_mode = login_config.get("mode", "auto")
     auto_province = bool(login_config.get("auto_province", True))
-    debug_config = config.get("debug", {})
     certify_rules: list[ProvinceRule] = []
     if auto_province:
         certify_path = load_certify_js_path(config)
@@ -1003,6 +1119,7 @@ def main() -> int:
 
     form_result: Optional[SubmitResult] = None
 
+    # 尝试直接登录
     if login_mode in ("auto", "direct"):
         try:
             response = session.get(login_url, timeout=timeout)
@@ -1014,6 +1131,7 @@ def main() -> int:
         except requests.RequestException as exc:
             logger.warning("Direct login request failed: %s", exc)
 
+    # 尝试表单登录
     if login_mode in ("auto", "form"):
         try:
             portal_page = session.get(portal_url, timeout=timeout)
@@ -1031,6 +1149,10 @@ def main() -> int:
                     param_source or "unknown",
                     len(resolved_param_str or ""),
                 )
+            auth_url = urljoin(
+                base_url + "/",
+                portal_config.get("auth_path", "/authServlet").lstrip("/"),
+            )
             form_result = submit_login_form(
                 session,
                 portal_url,
@@ -1041,12 +1163,9 @@ def main() -> int:
                 login_config.get("password_field", ""),
                 login_config.get("extra_fields", {}),
                 login_url,
-                urljoin(
-                    base_url + "/",
-                    config.get("portal", {}).get("auth_path", "/authServlet").lstrip("/"),
-                ),
-                config.get("check_url", ""),
-                config.get("captcha", {}),
+                auth_url,
+                check_url,
+                captcha_config,
                 auto_province,
                 certify_rules,
                 debug_config,
@@ -1062,8 +1181,9 @@ def main() -> int:
         except requests.RequestException as exc:
             logger.warning("Form login request failed: %s", exc)
 
+    # 最终检查登录结果
     time.sleep(2)
-    if check_online(session, config.get("check_url", ""), timeout):
+    if check_online(session, check_url, timeout):
         logger.info("Login success")
         return 0
 
