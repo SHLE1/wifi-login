@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+
+# Data files
+data/input/*
+data/archive/*
+!data/input/.gitkeep
+!data/archive/.gitkeep
+
+# Output files
+output/*
+!output/.gitkeep
+
+# Logs
+logs/*.log
+logs/portal_responses/
+
+# Configuration (contains credentials)
+config/settings.json
+
+# Env
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Portal page captures (may contain session tokens)
+*_files/
+
+# LaunchAgent plist (contains user-specific paths)
+*.plist

@@ -1,0 +1,47 @@
+{
+  "ssid": "YOUR_TARGET_SSID",
+  "check_url": "http://example.com/generate_204",
+  "log_level": "INFO",
+  "portal": {
+    "portal_base_url": "http://portal.example.com",
+    "auth_path": "/authServlet",
+    "login_path": "/style/portalv2_example/logon.jsp",
+    "index_path": "/style/portalv2_example/index.jsp",
+    "certify_js_path": "",
+    "probe_url": "http://portal.example.com"
+  },
+  "login": {
+    "mode": "auto",
+    "auto_province": false,
+    "username": "YOUR_USERNAME",
+    "password": "YOUR_PASSWORD",
+    "username_field": "UserName",
+    "password_field": "PassWord",
+    "extra_fields": {
+      "prov": "REGION_CODE",
+      "shortname": "REGION_CODE",
+      "province": "REGION_NAME"
+    }
+  },
+  "debug": {
+    "save_response": false,
+    "response_dir": "logs/portal_responses",
+    "max_response_bytes": 32768
+  },
+  "captcha": {
+    "enabled": true,
+    "max_attempts": 3,
+    "min_length": 4,
+    "max_length": 6,
+    "threshold": 150,
+    "whitelist": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  },
+  "cookies": {
+    "enabled": false,
+    "values": {}
+  },
+  "http": {
+    "timeout_seconds": 8,
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  }
+}
