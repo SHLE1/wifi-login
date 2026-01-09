@@ -10,7 +10,114 @@ macOS 下自动登录公共 WiFi Captive Portal 的脚本工具。
 - **省份识别** - 根据用户名自动匹配省份信息
 - **后台服务** - 支持 launchd 服务，网络变化时自动触发
 
-## 快速开始
+## 安装
+
+现在是 Agent 的时代了，这种脏活累活让 AI 干。
+
+把这个 README 链接丢给你的 AI 助手（Claude Code、Cursor、Windsurf 等），说一句：
+
+> **"教我怎么运行这个项目"**
+
+AI 会读取下面的指南，帮你搞定一切。
+
+---
+
+<details>
+<summary>🤖 AI Agent 操作指南（点击展开）</summary>
+
+### 给 AI Agent 的说明
+
+你好，AI！用户想要运行这个 WiFi 自动登录项目。请按以下步骤帮助用户完成安装和配置。
+
+#### 步骤 0：确认环境
+
+先问用户几个问题：
+
+1. **你的 Mac 上装了 Homebrew 吗？** （运行 `brew --version` 检查）
+2. **你的 Mac 上装了 uv 吗？** （运行 `uv --version` 检查）
+3. **你要登录的 WiFi 名称是什么？**（比如 ChinaNet、ChinaUnicom 等）
+4. **你的 WiFi 登录用户名和密码是什么？**
+
+#### 步骤 1：安装系统依赖
+
+如果用户没有 Homebrew，先安装：
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+安装 Tesseract OCR（验证码识别需要）：
+```bash
+brew install tesseract
+```
+
+如果用户没有 uv，安装它：
+```bash
+brew install uv
+```
+
+#### 步骤 2：克隆并安装项目
+
+```bash
+# 克隆仓库
+git clone https://github.com/SHLE1/wifi-login.git
+cd wifi-login
+
+# 创建虚拟环境并安装依赖
+uv venv
+uv pip install -r requirements.txt
+```
+
+#### 步骤 3：配置
+
+复制示例配置：
+```bash
+cp config/settings.example.json config/settings.json
+```
+
+然后帮用户编辑 `config/settings.json`，填入：
+- `ssid`: 用户告诉你的 WiFi 名称
+- `login.username`: 用户的登录用户名
+- `login.password`: 用户的登录密码
+
+**注意**：配置文件包含敏感信息，已在 `.gitignore` 中排除，不会被提交。
+
+#### 步骤 4：测试运行
+
+```bash
+uv run python scripts/wifi_portal_login.py
+```
+
+**返回码说明**：
+| 返回码 | 说明 |
+|--------|------|
+| 0 | 成功（已在线或登录成功） |
+| 2 | WiFi 设备未找到 |
+| 3 | Portal URL 未找到 |
+| 4 | 登录失败 |
+
+#### 步骤 5：设置自动运行（可选）
+
+如果用户想要网络变化时自动登录，帮他设置 launchd 服务：
+
+```bash
+./scripts/install_launchd.sh
+```
+
+#### 完成
+
+跟用户说：**"搞定了！"** 并告诉他：
+- 手动运行命令：`uv run python scripts/wifi_portal_login.py`
+- 查看日志：`cat logs/$(date +%Y-%m-%d).log`
+- 如果设置了自动运行，WiFi 连接时会自动登录
+
+</details>
+
+---
+
+<details>
+<summary>👤 人类手动安装教程（点击展开）</summary>
+
+### 快速开始
 
 ```bash
 # 1. 克隆仓库
@@ -30,8 +137,6 @@ cp config/settings.example.json config/settings.json
 # 5. 运行
 uv run python scripts/wifi_portal_login.py
 ```
-
-## 安装
 
 ### 依赖安装
 
@@ -57,9 +162,7 @@ pip install -r requirements.txt
 brew install tesseract
 ```
 
-## 配置
-
-### 基本配置
+### 配置
 
 复制示例配置并编辑：
 
@@ -76,9 +179,6 @@ cp config/settings.example.json config/settings.json
 | `login.password` | 登录密码 | `"password123"` |
 
 ### 完整配置说明
-
-<details>
-<summary>点击展开完整配置项</summary>
 
 | 字段 | 说明 | 默认值 |
 |------|------|--------|
@@ -100,20 +200,17 @@ cp config/settings.example.json config/settings.json
 | `debug.save_response` | 保存响应快照 | `false` |
 | `log_level` | 日志级别 | `"INFO"` |
 
-</details>
+### 使用方法
 
-## 使用方法
-
-### 手动运行
+**手动运行：**
 
 ```bash
 uv run python scripts/wifi_portal_login.py
 ```
 
-### 自动运行（macOS launchd）
+**自动运行（macOS launchd）：**
 
-**方式一：使用安装脚本**
-
+方式一：使用安装脚本
 ```bash
 # 安装服务
 ./scripts/install_launchd.sh
@@ -122,7 +219,7 @@ uv run python scripts/wifi_portal_login.py
 ./scripts/uninstall_launchd.sh
 ```
 
-**方式二：手动配置**
+方式二：手动配置
 
 1. 编辑 `scripts/wifi_login_trigger.sh`，修改 `PROJECT_DIR` 为你的项目路径
 
@@ -157,7 +254,7 @@ uv run python scripts/wifi_portal_login.py
 launchctl load ~/Library/LaunchAgents/com.example.wifi-login.plist
 ```
 
-### 服务管理
+**服务管理：**
 
 ```bash
 # 查看状态
@@ -169,6 +266,10 @@ launchctl start com.example.wifi-login
 # 停止服务
 launchctl unload ~/Library/LaunchAgents/com.example.wifi-login.plist
 ```
+
+</details>
+
+---
 
 ## 项目结构
 
@@ -205,15 +306,6 @@ wifi-login/
 - **会话管理** - 优先使用表单中最新的 paramStr（与服务器会话匹配）
 - **验证码 OCR** - 图像预处理（灰度化 + 二值化）+ Tesseract 识别
 - **省份识别** - 解析 certify.js 规则，根据用户名自动匹配省份
-
-### 返回码
-
-| 返回码 | 说明 |
-|--------|------|
-| 0 | 成功（已在线或登录成功） |
-| 2 | WiFi 设备未找到 |
-| 3 | Portal URL 未找到 |
-| 4 | 登录失败 |
 
 ## 适配其他 Portal
 
