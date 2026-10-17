@@ -23,7 +23,8 @@ def load_certify_js_path(certify_js_path: str, project_root: Path) -> Optional[P
 
     candidates = []
     for path in project_root.rglob("certify.js"):
-        if "venv" in path.parts:
+        # 跳过虚拟环境：uv 默认建 .venv，旧方案用 venv
+        if any(part in ("venv", ".venv") for part in path.parts):
             continue
         candidates.append(path)
     if not candidates:

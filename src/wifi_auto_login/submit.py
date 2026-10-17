@@ -56,7 +56,7 @@ def sanitize_response(text: str, username: str, password: str) -> str:
     for label, value in (("UserName", username), ("PassWord", password)):
         if value:
             sanitized = sanitized.replace(value, f"{label}=***")
-    sanitized = re.sub(r"(paramStr=)[^&\"\\s>]+", r"\1***", sanitized)
+    sanitized = re.sub(r"(paramStr=)[^&\"\s>]+", r"\1***", sanitized)
     sanitized = re.sub(
         r'(<input[^>]+name="verifycode"[^>]+value=")[^"]*(")',
         r"\1***\2",
@@ -187,5 +187,14 @@ def submit_login_form(session: requests.Session, request: SubmitRequest) -> Subm
                 request.debug,
                 sanitize_response(response.text, request.login.username, request.login.password),
             )
+
+    # 所有验证码尝试均未产出可提交的请求：给出可诊断的 hint，而不是空值
+    if result.attempts == 0 and result.captcha_attempts > 0 and not result.error_hint:
+        result.error_hint = "captcha_failed"
+        logger.debug(
+            "Captcha never solved attempts=%s failures=%s",
+            result.captcha_attempts,
+            result.captcha_failures,
+        )
 
     return result

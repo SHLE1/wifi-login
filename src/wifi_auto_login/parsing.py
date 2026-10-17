@@ -195,5 +195,6 @@ def find_captcha_src(html: str) -> str:
     match = re.search(r'id="verifyCode_img"[^>]+src="([^"]+)"', html, re.IGNORECASE)
     if match:
         return match.group(1)
-    match = re.search(r'createVerifycode[^"]*', html, re.IGNORECASE)
-    return match.group(0) if match else ""
+    # JS 构造验证码 URL 的形态：createVerifycode("/createVerifycode?...")，取引号内的参数作为 URL
+    match = re.search(r'''createVerifycode\s*\(\s*["']([^"']+)["']''', html, re.IGNORECASE)
+    return match.group(1) if match else ""

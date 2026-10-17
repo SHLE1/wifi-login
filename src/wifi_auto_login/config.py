@@ -87,6 +87,14 @@ def _as_bool(value, default: bool = False) -> bool:
     return bool(value)
 
 
+def _as_dict(value, key: str) -> dict:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ConfigError(f"Config field '{key}' must be a JSON object")
+    return value
+
+
 def _section(raw: dict, key: str) -> dict:
     value = raw.get(key)
     if value is None:
@@ -131,7 +139,7 @@ def _parse(raw: dict) -> AppConfig:
                 password=login_raw.get("password", ""),
                 username_field=login_raw.get("username_field", ""),
                 password_field=login_raw.get("password_field", ""),
-                extra_fields=login_raw.get("extra_fields", {}),
+                extra_fields=_as_dict(login_raw.get("extra_fields"), "login.extra_fields"),
             ),
             http=HttpConfig(
                 timeout_seconds=int(http_raw.get("timeout_seconds", 8)),
@@ -153,7 +161,7 @@ def _parse(raw: dict) -> AppConfig:
             ),
             cookies=CookiesConfig(
                 enabled=_as_bool(cookies_raw.get("enabled")),
-                values=cookies_raw.get("values", {}),
+                values=_as_dict(cookies_raw.get("values"), "cookies.values"),
             ),
         )
     except (TypeError, ValueError) as exc:

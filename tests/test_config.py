@@ -75,6 +75,25 @@ class ConfigTests(unittest.TestCase):
                 load_config(path)
         self.assertIn("login.mode", str(cm.exception))
 
+    def test_nested_mapping_options_reject_non_objects(self):
+        for section, field in (("login", "extra_fields"), ("cookies", "values")):
+            for value in ([], "invalid", 1, False):
+                with self.subTest(section=section, value=value):
+                    raw = {"ssid": "MyWiFi", "check_url": "http://check",
+                           "portal": {}, "login": {}}
+                    raw.setdefault(section, {})[field] = value
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        path = self.write_config(tmpdir, json.dumps(raw))
+                        with self.assertRaisesRegex(ConfigError, f"{section}.{field}"):
+                            load_config(path)
+
+    def test_legacy_certify_path_remains_supported(self):
+        raw = {"ssid": "MyWiFi", "check_url": "http://check",
+               "portal": {}, "login": {"certify_js_path": "legacy.js"}}
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = load_config(self.write_config(tmpdir, json.dumps(raw)))
+        self.assertEqual(config.portal.certify_js_path, "legacy.js")
+
     def test_load_config_parses_typed_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self.write_config(

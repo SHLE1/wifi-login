@@ -1,5 +1,4 @@
 import sys
-import types
 import unittest
 from pathlib import Path
 
@@ -8,11 +7,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
-
-sys.modules.setdefault("requests", types.ModuleType("requests"))
-sys.modules["requests"].Session = object
-sys.modules["requests"].Response = object
-sys.modules["requests"].RequestException = Exception
 
 
 from wifi_auto_login.models import PortalForm
@@ -124,7 +118,10 @@ class ParsingTests(unittest.TestCase):
         self.assertEqual(find_captcha_src(html), "/captcha?random=1")
 
         js_html = '<script>createVerifycode("/createVerifycode");</script>'
-        self.assertEqual(find_captcha_src(js_html), 'createVerifycode(')
+        self.assertEqual(find_captcha_src(js_html), "/createVerifycode")
+
+        # 无参调用拿不到可用 URL，应返回空串而不是截断的函数名
+        self.assertEqual(find_captcha_src("<script>createVerifycode()</script>"), "")
 
 
 if __name__ == "__main__":

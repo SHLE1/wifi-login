@@ -17,12 +17,6 @@ uv.lock
 .pi/
 
 # Runtime data
-data/input/*
-data/archive/*
-!data/input/.gitkeep
-!data/archive/.gitkeep
-output/*
-!output/.gitkeep
 logs/*
 !logs/.gitkeep
 
