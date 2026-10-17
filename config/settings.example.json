@@ -34,6 +34,7 @@
     "min_length": 4,
     "max_length": 6,
     "threshold": 150,
+    "retry_delay": 0.3,
     "whitelist": "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
   },
   "cookies": {

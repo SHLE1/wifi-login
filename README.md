@@ -6,7 +6,7 @@ macOS 下自动登录公共 WiFi Captive Portal 的脚本工具。
 
 - **自动检测** - 检测是否连接到指定 WiFi 网络
 - **Portal 发现** - 自动获取 Portal 页面的 paramStr 会话令牌
-- **验证码识别** - 使用 Tesseract OCR 自动识别验证码
+- **验证码识别** - 使用 ddddocr 自动识别验证码（白名单过滤 + 二值化预处理）
 - **省份识别** - 根据用户名自动匹配省份信息
 - **后台服务** - 支持 launchd 服务，网络变化时自动触发
 
@@ -37,7 +37,7 @@ AI 会读取下面的指南，帮你搞定一切。
 
 1. **你的 Mac 上装了 Homebrew 吗？** （运行 `brew --version` 检查）
 2. **你的 Mac 上装了 uv 吗？** （运行 `uv --version` 检查）
-3. **你要登录的 WiFi 名称是什么？**（比如 ChinaNet、ChinaUnicom 等）
+3. **你要登录的 WiFi 名称是什么？**（比如 ChinaNet、CMCC 等运营商公共 WiFi）
 4. **你的 WiFi 登录用户名和密码是什么？**
 
 #### 步骤 1：安装系统依赖
@@ -45,11 +45,6 @@ AI 会读取下面的指南，帮你搞定一切。
 如果用户没有 Homebrew，先安装：
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
-
-安装 Tesseract OCR（验证码识别需要）：
-```bash
-brew install tesseract
 ```
 
 如果用户没有 uv，安装它：
@@ -64,9 +59,8 @@ brew install uv
 git clone https://github.com/SHLE1/wifi-login.git
 cd wifi-login
 
-# 创建虚拟环境并安装依赖
-uv venv
-uv pip install -r requirements.txt
+# 安装依赖（推荐 uv sync，也可以 uv venv + uv pip install -r requirements.txt）
+uv sync
 ```
 
 #### 步骤 3：配置
@@ -150,6 +144,8 @@ cp config/settings.example.json config/settings.json
 #### 步骤 4：测试运行
 
 ```bash
+uv run python -m wifi_auto_login.cli
+# 或兼容入口：
 uv run python scripts/wifi_portal_login.py
 ```
 
@@ -157,8 +153,8 @@ uv run python scripts/wifi_portal_login.py
 | 返回码 | 说明 |
 |--------|------|
 | 0 | 成功（已在线或登录成功） |
-| 2 | WiFi 设备未找到 |
-| 3 | Portal URL 未找到 |
+| 2 | 配置文件错误或 WiFi 设备未找到 |
+| 3 | Portal 不可达或未找到 |
 | 4 | 登录失败 |
 
 #### 步骤 5：设置自动运行（可选）
@@ -166,13 +162,19 @@ uv run python scripts/wifi_portal_login.py
 如果用户想要网络变化时自动登录，帮他设置 launchd 服务：
 
 ```bash
-./scripts/install_launchd.sh
+./bin/install-launchd.sh
+```
+
+卸载服务：
+
+```bash
+./bin/uninstall-launchd.sh
 ```
 
 #### 完成
 
-跟用户说：**"搞定了！"** 并告诉他：
-- 手动运行命令：`uv run python scripts/wifi_portal_login.py`
+跟用户说：**“搞定了！”** 并告诉他：
+- 手动运行命令：`uv run python -m wifi_auto_login.cli`
 - 查看日志：`cat logs/$(date +%Y-%m-%d).log`
 - 如果设置了自动运行，WiFi 连接时会自动登录
 
@@ -191,17 +193,14 @@ git clone https://github.com/SHLE1/wifi-login.git
 cd wifi-login
 
 # 2. 安装依赖
-uv venv && uv pip install -r requirements.txt
+uv sync
 
-# 3. 安装 Tesseract OCR
-brew install tesseract
-
-# 4. 配置
+# 3. 配置
 cp config/settings.example.json config/settings.json
 # 编辑 config/settings.json，填入你的凭据
 
-# 5. 运行
-uv run python scripts/wifi_portal_login.py
+# 4. 运行
+uv run python -m wifi_auto_login.cli
 ```
 
 ### 依赖安装
@@ -209,8 +208,7 @@ uv run python scripts/wifi_portal_login.py
 **使用 [uv](https://github.com/astral-sh/uv)（推荐）：**
 
 ```bash
-uv venv
-uv pip install -r requirements.txt
+uv sync
 ```
 
 **使用 pip：**
@@ -223,10 +221,7 @@ pip install -r requirements.txt
 
 ### 系统依赖
 
-```bash
-# macOS
-brew install tesseract
-```
+无。验证码识别使用纯 Python 的 ddddocr，SSID 读取优先使用系统自带的 CoreWLAN，不需要 Homebrew 或其他系统包。
 
 ### 配置
 
@@ -357,6 +352,8 @@ cp config/settings.example.json config/settings.json
 **手动运行：**
 
 ```bash
+uv run python -m wifi_auto_login.cli
+# 或兼容入口：
 uv run python scripts/wifi_portal_login.py
 ```
 
@@ -365,17 +362,15 @@ uv run python scripts/wifi_portal_login.py
 方式一：使用安装脚本
 ```bash
 # 安装服务
-./scripts/install_launchd.sh
+./bin/install-launchd.sh
 
 # 卸载服务
-./scripts/uninstall_launchd.sh
+./bin/uninstall-launchd.sh
 ```
 
 方式二：手动配置
 
-1. 编辑 `scripts/wifi_login_trigger.sh`，修改 `PROJECT_DIR` 为你的项目路径
-
-2. 创建 launchd 配置文件 `~/Library/LaunchAgents/com.example.wifi-login.plist`：
+1. 创建 launchd 配置文件 `~/Library/LaunchAgents/com.github.shle1.wifi-login.plist`：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -383,10 +378,10 @@ uv run python scripts/wifi_portal_login.py
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.example.wifi-login</string>
+    <string>com.github.shle1.wifi-login</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/path/to/wifi-login/scripts/wifi_login_trigger.sh</string>
+        <string>/path/to/wifi-login/bin/wifi-login-trigger.sh</string>
     </array>
     <key>WatchPaths</key>
     <array>
@@ -403,7 +398,7 @@ uv run python scripts/wifi_portal_login.py
 3. 加载服务：
 
 ```bash
-launchctl load ~/Library/LaunchAgents/com.example.wifi-login.plist
+launchctl load ~/Library/LaunchAgents/com.github.shle1.wifi-login.plist
 ```
 
 **服务管理：**
@@ -413,11 +408,13 @@ launchctl load ~/Library/LaunchAgents/com.example.wifi-login.plist
 launchctl list | grep wifi-login
 
 # 手动触发
-launchctl start com.example.wifi-login
+launchctl start com.github.shle1.wifi-login
 
 # 停止服务
-launchctl unload ~/Library/LaunchAgents/com.example.wifi-login.plist
+launchctl unload ~/Library/LaunchAgents/com.github.shle1.wifi-login.plist
 ```
+
+**注意**：使用方式二时，先把 `bin/wifi-login-trigger.sh` 里的 `SSID_TARGET` 改成你的 WiFi 名称（方式一的安装脚本自动处理路径，但 `SSID_TARGET` 同样需要改）。
 
 </details>
 
@@ -427,19 +424,23 @@ launchctl unload ~/Library/LaunchAgents/com.example.wifi-login.plist
 
 ```
 wifi-login/
+├── src/wifi_auto_login/        # 主实现（模块化的 Python 包）
+├── scripts/
+│   └── wifi_portal_login.py   # 兼容入口（转调包入口）
+├── bin/
+│   ├── install-launchd.sh     # launchd 服务安装脚本
+│   ├── uninstall-launchd.sh   # launchd 服务卸载脚本
+│   └── wifi-login-trigger.sh   # launchd 触发脚本
+├── launchd/                    # launchd 配置模板
+├── tests/                      # 单元测试（unittest）
 ├── config/
 │   ├── settings.json          # 配置文件（含凭据，已 gitignore）
-│   ├── settings.example.json  # 示例配置
-│   └── logging_config.py      # 日志配置模块
-├── scripts/
-│   ├── wifi_portal_login.py   # 主登录脚本
-│   ├── wifi_login_trigger.sh  # launchd 触发脚本
-│   ├── install_launchd.sh     # 服务安装脚本
-│   └── uninstall_launchd.sh   # 服务卸载脚本
+│   └── settings.example.json  # 示例配置
 ├── logs/                      # 日志目录
 ├── data/                      # 数据目录
 ├── output/                    # 输出目录
-├── requirements.txt           # Python 依赖
+├── pyproject.toml             # 项目定义与依赖（uv sync 用）
+├── requirements.txt           # Python 依赖（pip 安装用）
 ├── LICENSE                    # AGPLv3 许可证
 └── README.md
 ```
@@ -456,7 +457,7 @@ wifi-login/
 
 - **重定向跟踪** - 手动跟踪 HTTP 重定向链，捕获 Portal 的 paramStr 令牌
 - **会话管理** - 优先使用表单中最新的 paramStr（与服务器会话匹配）
-- **验证码 OCR** - 图像预处理（灰度化 + 二值化）+ Tesseract 识别
+- **验证码 OCR** - 图像预处理（灰度化 + 二值化）+ ddddocr 识别，支持白名单过滤与重试
 - **省份识别** - 解析 certify.js 规则，根据用户名自动匹配省份
 
 ## 适配其他 Portal
@@ -598,7 +599,7 @@ login.extra_fields = {
 运行脚本测试配置：
 
 ```bash
-uv run python scripts/wifi_portal_login.py
+uv run python -m wifi_auto_login.cli
 ```
 
 **常见问题排查：**

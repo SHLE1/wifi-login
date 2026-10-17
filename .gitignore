@@ -6,38 +6,39 @@ __pycache__/
 .Python
 venv/
 .venv/
+uv.lock
 
-# Data files
+# Local agent / editor state
+.alma-snapshots
+.claude/
+.vscode/
+.idea/
+.firecrawl/
+.pi/
+
+# Runtime data
 data/input/*
 data/archive/*
 !data/input/.gitkeep
 !data/archive/.gitkeep
-
-# Output files
 output/*
 !output/.gitkeep
+logs/*
+!logs/.gitkeep
 
-# Logs
-logs/*.log
-logs/portal_responses/
-
-# Configuration (contains credentials)
+# Configuration and secrets
 config/settings.json
-
-# Env
 .env
 .env.local
 
-# IDE
-.vscode/
-.idea/
+# Portal captures and debug output
+*_files/
+logs/portal_responses/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Portal page captures (may contain session tokens)
-*_files/
-
-# LaunchAgent plist (contains user-specific paths)
-*.plist
+# Raycast extension build output
+raycast-extension/node_modules/
+raycast-extension/dist/

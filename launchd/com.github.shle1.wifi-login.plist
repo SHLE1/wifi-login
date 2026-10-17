@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.github.shle1.wifi-login</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PROJECT_ROOT__/bin/wifi-login-trigger.sh</string>
+    </array>
+
+    <!-- 监听网络状态变化 -->
+    <key>WatchPaths</key>
+    <array>
+        <string>/Library/Preferences/SystemConfiguration</string>
+    </array>
+
+    <!-- 启动时也运行一次 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- 防止频繁触发，最小间隔 10 秒 -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- 日志输出 -->
+    <key>StandardOutPath</key>
+    <string>__PROJECT_ROOT__/logs/launchd_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__PROJECT_ROOT__/logs/launchd_stderr.log</string>
+</dict>
+</plist>
